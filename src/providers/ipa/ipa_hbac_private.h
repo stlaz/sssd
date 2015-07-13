@@ -53,6 +53,7 @@
 #define IPA_CN "cn"
 #define IPA_MEMBER_SERVICE "memberService"
 #define IPA_SERVICE_CATEGORY "serviceCategory"
+#define IPA_ACCESSTIME "accessTime"
 #define IPA_TRUE_VALUE "TRUE"
 
 #define IPA_HBAC_BASE_TMPL "cn=hbac,%s"
@@ -129,6 +130,13 @@ hbac_service_attrs_to_rule(TALLOC_CTX *mem_ctx,
                            const char *rule_name,
                            struct sysdb_attrs *rule_attrs,
                            struct hbac_rule_element **services);
+
+errno_t
+hbac_time_attrs_to_rule(TALLOC_CTX *mem_ctx,
+                       const char *rule_name,
+                       struct sysdb_attrs *rule_attrs,
+                       struct hbac_time_rules **_times);
+
 errno_t
 get_ipa_servicegroupname(TALLOC_CTX *mem_ctx,
                          struct sysdb_ctx *sysdb,

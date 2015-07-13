@@ -102,7 +102,9 @@ enum hbac_eval_result {
 /**
  * Opaque type contained in hbac_evaluator.c
  */
-struct hbac_time_rules;
+ struct hbac_time_rules {
+     const char **accesstimes;
+ };
 
 /**
  * Component of an HBAC rule
@@ -321,6 +323,9 @@ void hbac_free_info(struct hbac_info *info);
 /** Source host element */
 #define HBAC_RULE_ELEMENT_SOURCEHOSTS 0x08
 
+/** Time rules */
+#define HBAC_RULE_TIMERULES 0x10
+
 /**
  * @brief Evaluate whether an HBAC rule contains all necessary elements
  *
@@ -329,8 +334,9 @@ void hbac_free_info(struct hbac_info *info);
  *                           This is a bitmask that may contain one or more
  *                           of #HBAC_RULE_ELEMENT_USERS,
  *                           #HBAC_RULE_ELEMENT_SERVICES,
- *                           #HBAC_RULE_ELEMENT_TARGETHOSTS and
- *                           #HBAC_RULE_ELEMENT_SOURCEHOSTS
+ *                           #HBAC_RULE_ELEMENT_TARGETHOSTS,
+ *                           #HBAC_RULE_ELEMENT_SOURCEHOSTS and
+ *                           #HBAC_RULE_TIMERULES
  *
  * @return True if the rule contains all mandatory attributes
  *

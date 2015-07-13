@@ -94,7 +94,7 @@ ipa_hbac_rule_info_send(TALLOC_CTX *mem_ctx,
     state->opts = opts;
     state->search_bases = search_bases;
     state->search_base_iter = 0;
-    state->attrs = talloc_zero_array(state, const char *, 15);
+    state->attrs = talloc_zero_array(state, const char *, 16);
     if (state->attrs == NULL) {
         ret = ENOMEM;
         goto immediate;
@@ -113,7 +113,8 @@ ipa_hbac_rule_info_send(TALLOC_CTX *mem_ctx,
     state->attrs[11] = IPA_EXTERNAL_HOST;
     state->attrs[12] = IPA_MEMBER_HOST;
     state->attrs[13] = IPA_HOST_CATEGORY;
-    state->attrs[14] = NULL;
+    state->attrs[14] = IPA_ACCESSTIME;
+    state->attrs[15] = NULL;
 
     rule_filter = talloc_asprintf(tmp_ctx,
                                   "(&(objectclass=%s)"

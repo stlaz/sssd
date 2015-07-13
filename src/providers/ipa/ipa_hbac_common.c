@@ -353,6 +353,16 @@ hbac_attrs_to_rule(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
+    ret = hbac_time_attrs_to_rule(new_rule, new_rule->name,
+                                  hbac_ctx->rules[idx],
+                                  &new_rule->timerules);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Could not parse time rules for rule [%s]\n",
+                new_rule->name);
+        goto done;
+    }
+
     *rule = new_rule;
     ret = EOK;
 
@@ -360,6 +370,55 @@ done:
     if (ret != EOK) talloc_free(new_rule);
     return ret;
 }
+
+errno_t
+hbac_time_attrs_to_rule(TALLOC_CTX *mem_ctx,
+                        const char *rule_name,
+                        struct sysdb_attrs *rule_attrs,
+                        struct hbac_time_rules **_times)
+{
+    errno_t ret;
+    TALLOC_CTX *tmp_ctx = NULL;
+    struct ldb_message_element *el;
+    struct hbac_time_rules *new_times = NULL;
+
+    tmp_ctx = talloc_new(mem_ctx);
+    if (tmp_ctx == NULL) return ENOMEM;
+
+    new_times = talloc_zero(tmp_ctx, struct hbac_time_rules);
+    if (new_times == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    DEBUG(SSSDBG_TRACE_LIBS, "Processing time policies for rule [%s]\n",
+            rule_name);
+
+    ret = sysdb_attrs_get_el(rule_attrs, IPA_ACCESSTIME, &el);
+    if (ret != EOK && ret != ENOENT) {
+        DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_get_el failed");
+        goto done;
+    }
+    else if (ret == ENOENT || el->num_values == 0) {
+        el->num_values = 0;
+        DEBUG(SSSDBG_CONF_SETTINGS,
+              "No access time specified.\n");
+    }
+
+    new_times->accesstimes = sss_ldb_el_to_string_list(new_times, el);
+    if (new_times->accesstimes == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = EOK;
+    *_times = talloc_steal(mem_ctx, new_times);
+
+done:
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
 
 errno_t
 hbac_get_category(struct sysdb_attrs *attrs,

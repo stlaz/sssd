@@ -73,14 +73,6 @@ static void hbac_rule_element_debug_print(struct hbac_rule_element *el,
 /* auxiliary function for hbac_rule logging */
 static void hbac_rule_debug_print(struct hbac_rule *rule);
 
-
-/* Placeholder structure for future HBAC time-based
- * evaluation rules
- */
-struct hbac_time_rules {
-    int not_yet_implemented;
-};
-
 enum hbac_eval_result_int {
     HBAC_EVAL_MATCH_ERROR = -1,
     HBAC_EVAL_MATCHED,
@@ -101,6 +93,14 @@ static bool hbac_rule_element_is_complete(struct hbac_rule_element *el)
     /* If other categories are added, handle them here */
 
     return false;
+}
+
+static bool hbac_rule_timerules_elem_is_complete(struct hbac_time_rules *el)
+{
+    if (el == NULL) return false;
+
+    /** Currently nothing has to be set */
+    return true;
 }
 
 bool hbac_rule_is_complete(struct hbac_rule *rule, uint32_t *missing_attrs)
@@ -133,6 +133,11 @@ bool hbac_rule_is_complete(struct hbac_rule *rule, uint32_t *missing_attrs)
     if (!hbac_rule_element_is_complete(rule->srchosts)) {
         complete = false;
         *missing_attrs |= HBAC_RULE_ELEMENT_SOURCEHOSTS;
+    }
+
+    if (!hbac_rule_timerules_elem_is_complete(rule->timerules)) {
+        complete = false;
+        *missing_attrs |= HBAC_RULE_TIMERULES;
     }
 
     return complete;
