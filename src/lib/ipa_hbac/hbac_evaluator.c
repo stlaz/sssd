@@ -30,7 +30,7 @@
 #include <errno.h>
 #include "ipa_hbac.h"
 #include "sss_utf8.h"
-
+#include "ipa_timerules.h"
 #ifndef HAVE_ERRNO_T
 #define HAVE_ERRNO_T
 typedef int errno_t;
@@ -237,7 +237,8 @@ enum hbac_eval_result_int hbac_evaluate_rule(struct hbac_rule *rule,
     if (!rule->users
      || !rule->services
      || !rule->targethosts
-     || !rule->srchosts) {
+     || !rule->srchosts
+     || !rule->timerules) {
         HBAC_DEBUG(HBAC_DBG_INFO,
                    "Rule [%s] cannot be parsed, some elements are empty\n",
                    rule->name);
@@ -298,7 +299,19 @@ enum hbac_eval_result_int hbac_evaluate_rule(struct hbac_rule *rule,
     } else if (!matched) {
         return HBAC_EVAL_UNMATCHED;
     }
+
+    /* Check time policies */
+    ret = hbac_evaluate_time_rules(rule->timerules,
+                                    hbac_req->request_time,
+                                    &matched);
+    if(ret != EOK) {
+        *error = HBAC_ERROR_UNPARSEABLE_RULE;
+        return HBAC_EVAL_MATCH_ERROR;
+    } else if (!matched) {
+        return HBAC_EVAL_UNMATCHED;
+    }
     return HBAC_EVAL_MATCHED;
+
 }
 
 static errno_t hbac_evaluate_element(struct hbac_rule_element *rule_el,
