@@ -626,6 +626,213 @@ fail:
     return NULL;
 }
 
+/* ============== HBAC Time Rules Element ================*/
+typedef struct {
+    PyObject_HEAD
+
+    PyObject *accesstimes;
+} HbacTimeRules;
+
+static PyObject *
+HbacTimeRules_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    HbacTimeRules *self;
+
+    self = (HbacTimeRules *) type->tp_alloc(type, 0);
+    if (self == NULL) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+
+    self->accesstimes = PyList_New(0);
+    if (!self->accesstimes) {
+        Py_DECREF(self);
+        PyErr_NoMemory();
+        return NULL;
+    }
+
+    return (PyObject *) self;
+}
+
+static int
+HbacTimeRules_clear(HbacTimeRules *self)
+{
+    Py_CLEAR(self->accesstimes);
+    return 0;
+}
+
+static void
+HbacTimeRules_dealloc(HbacTimeRules *self)
+{
+    HbacTimeRules_clear(self);
+    Py_TYPE(self)->tp_free((PyObject *)self);
+}
+
+static int
+HbacTimeRules_traverse(HbacTimeRules *self, visitproc visit, void *arg)
+{
+    Py_VISIT(self->accesstimes);
+    return 0;
+}
+
+static int
+hbac_time_rules_set_accesstimes(HbacTimeRules *self, PyObject *accesstimes,
+                                void *closure);
+
+static int
+HbacTimeRules_init(HbacTimeRules *self, PyObject *args, PyObject *kwargs)
+{
+    const char * const kwlist[] = { "accesstimes", NULL };
+
+    PyObject *accesstimes = NULL;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs,
+                                     sss_py_const_p(char, "|O"),
+                                     discard_const_p(char *, kwlist),
+                                     &accesstimes))
+    {
+        return -1;
+    }
+
+    if (accesstimes) {
+        if (hbac_time_rules_set_accesstimes(self, accesstimes, NULL) != 0) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static int
+hbac_time_rules_set_accesstimes(HbacTimeRules *self,
+                                PyObject *accesstimes,
+                                void *closure)
+{
+    CHECK_ATTRIBUTE_DELETE(accesstimes, "accesstimes");
+
+    if (!verify_sequence(accesstimes, "accesstimes")) {
+        return -1;
+    }
+
+    SAFE_SET(self->accesstimes, accesstimes);
+    return 0;
+}
+
+static PyObject *
+hbac_time_rules_get_accesstimes(HbacTimeRules *self, void *closure)
+{
+    Py_INCREF(self->accesstimes);
+    return self->accesstimes;
+}
+
+static PyObject *
+HbacTimeRules_repr(HbacTimeRules *self)
+{
+    char *straccesstimes;
+    PyObject *o, *format, *args;
+
+    format = PyUnicode_FromString("<accesstimes [%s]>");
+    if (format == NULL) {
+        return NULL;
+    }
+
+    straccesstimes = str_concat_sequence(self->accesstimes,
+                                         discard_const_p(char, ","));
+
+    if (straccesstimes == NULL) {
+        PyMem_Free(straccesstimes);
+        Py_DECREF(format);
+        return NULL;
+    }
+
+    args = Py_BuildValue(sss_py_const_p(char, "s"), straccesstimes);
+
+    if (args == NULL) {
+        PyMem_Free(straccesstimes);
+        Py_DECREF(format);
+        return NULL;
+    }
+
+    o = PyUnicode_Format(format, args);
+    PyMem_Free(straccesstimes);
+    Py_DECREF(format);
+    Py_DECREF(args);
+    return o;
+}
+
+PyDoc_STRVAR(HbacTimeRules_accesstimes__doc__,
+"(sequence of strings) describing when the rule should be applied");
+
+static PyGetSetDef py_hbac_time_rules_getset[] = {
+    { discard_const_p(char, "accesstimes"),
+      (getter) hbac_time_rules_get_accesstimes,
+      (setter) hbac_time_rules_set_accesstimes,
+      HbacTimeRules_accesstimes__doc__,
+      NULL },
+
+    { NULL, 0, 0, 0, NULL } /* Sentinel */
+};
+
+PyDoc_STRVAR(HbacTimeRules__doc__,
+"IPA HBAC Time Rules\n\n"
+"HbacTimeRules() -> new empty time rules element\n"
+"HbacTimeRules([accessTime])\n");
+
+static PyTypeObject pyhbac_hbactime_rules_type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = sss_py_const_p(char, "pyhbac.HbacTimeRules"),
+    .tp_basicsize = sizeof(HbacTimeRules),
+    .tp_new = HbacTimeRules_new,
+    .tp_dealloc = (destructor) HbacTimeRules_dealloc,
+    .tp_traverse = (traverseproc) HbacTimeRules_traverse,
+    .tp_clear = (inquiry) HbacTimeRules_clear,
+    .tp_init = (initproc) HbacTimeRules_init,
+    .tp_repr = (reprfunc) HbacTimeRules_repr,
+    .tp_getset = py_hbac_time_rules_getset,
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
+    .tp_doc = HbacTimeRules__doc__
+};
+
+static void
+free_hbac_time_rules(struct hbac_time_rules *el)
+{
+    if (!el) return;
+
+    free_string_list(el->accesstimes);
+    PyMem_Free(el);
+}
+
+struct hbac_time_rules *
+HbacTimeRules_to_native(HbacTimeRules *pyel)
+{
+    struct hbac_time_rules *tr = NULL;
+
+    if (!PyObject_IsInstance((PyObject *) pyel,
+                             (PyObject *) &pyhbac_hbactime_rules_type))
+    {
+        PyErr_Format(PyExc_TypeError,
+                     "The element must be of type HbacTimeRules\n");
+        goto fail;
+    }
+
+    tr = PyMem_Malloc(sizeof(struct hbac_time_rules));
+    if (!tr) {
+        PyErr_NoMemory();
+        goto fail;
+    }
+
+    tr->accesstimes = sequence_as_string_list(pyel->accesstimes, "accesstimes");
+
+    if (!tr->accesstimes) {
+        goto fail;
+    }
+
+    return tr;
+fail:
+    free_hbac_time_rules(tr);
+    return NULL;
+}
+
 /* ==================== HBAC Rule ========================*/
 typedef struct {
     PyObject_HEAD
@@ -637,6 +844,7 @@ typedef struct {
     HbacRuleElement *services;
     HbacRuleElement *targethosts;
     HbacRuleElement *srchosts;
+    HbacTimeRules *timerules;
 } HbacRuleObject;
 
 static void
@@ -676,12 +884,18 @@ HbacRule_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self->srchosts = (HbacRuleElement *) HbacRuleElement_new(
                                                 &pyhbac_hbacrule_element_type,
                                                 NULL, NULL);
+    self->timerules = (HbacTimeRules *) HbacTimeRules_new(
+                                                &pyhbac_hbactime_rules_type,
+                                                NULL, NULL);
+
     if (self->services == NULL || self->users == NULL ||
-        self->targethosts == NULL || self->srchosts == NULL) {
+        self->targethosts == NULL || self->srchosts == NULL
+        || self->timerules == NULL) {
         Py_XDECREF(self->services);
         Py_XDECREF(self->users);
         Py_XDECREF(self->targethosts);
         Py_XDECREF(self->srchosts);
+        Py_XDECREF(self->timerules);
         Py_DECREF(self->name);
         Py_DECREF(self);
         PyErr_NoMemory();
@@ -699,6 +913,7 @@ HbacRule_clear(HbacRuleObject *self)
     Py_CLEAR(self->users);
     Py_CLEAR(self->targethosts);
     Py_CLEAR(self->srchosts);
+    Py_CLEAR(self->timerules);
     return 0;
 }
 
@@ -717,6 +932,7 @@ HbacRule_traverse(HbacRuleObject *self, visitproc visit, void *arg)
     Py_VISIT((PyObject *) self->users);
     Py_VISIT((PyObject *) self->targethosts);
     Py_VISIT((PyObject *) self->srchosts);
+    Py_VISIT((PyObject *) self->timerules);
     return 0;
 }
 
@@ -758,7 +974,8 @@ HbacRule_init(HbacRuleObject *self, PyObject *args, PyObject *kwargs)
     if (HbacRuleElement_init(self->users, empty_tuple, NULL) == -1 ||
         HbacRuleElement_init(self->services, empty_tuple, NULL) == -1 ||
         HbacRuleElement_init(self->targethosts, empty_tuple, NULL) == -1 ||
-        HbacRuleElement_init(self->srchosts, empty_tuple, NULL) == -1) {
+        HbacRuleElement_init(self->srchosts, empty_tuple, NULL) == -1 ||
+        HbacTimeRules_init(self->timerules, empty_tuple, NULL) == -1) {
         Py_DECREF(empty_tuple);
         return -1;
     }
@@ -871,11 +1088,13 @@ HbacRule_repr(HbacRuleObject *self)
     PyObject *services_repr;
     PyObject *targethosts_repr;
     PyObject *srchosts_repr;
+    PyObject *timerules_repr;
     PyObject *o, *format, *args;
 
     format = PyUnicode_FromString("<name %s enabled %d "
                                             "users %s services %s "
-                                            "targethosts %s srchosts %s>");
+                                            "targethosts %s srchosts %s "
+                                            "timerules %s>");
     if (format == NULL) {
         return NULL;
     }
@@ -884,25 +1103,30 @@ HbacRule_repr(HbacRuleObject *self)
     services_repr = HbacRuleElement_repr(self->services);
     targethosts_repr = HbacRuleElement_repr(self->targethosts);
     srchosts_repr = HbacRuleElement_repr(self->srchosts);
+    timerules_repr = HbacTimeRules_repr(self->timerules);
     if (users_repr == NULL || services_repr == NULL ||
-        targethosts_repr == NULL || srchosts_repr == NULL) {
+        targethosts_repr == NULL || srchosts_repr == NULL ||
+        timerules_repr == NULL) {
         Py_XDECREF(users_repr);
         Py_XDECREF(services_repr);
         Py_XDECREF(targethosts_repr);
         Py_XDECREF(srchosts_repr);
+        Py_XDECREF(timerules_repr);
         Py_DECREF(format);
         return NULL;
     }
 
-    args = Py_BuildValue(sss_py_const_p(char, "OiOOOO"),
+    args = Py_BuildValue(sss_py_const_p(char, "OiOOOOO"),
                          self->name, self->enabled,
                          users_repr, services_repr,
-                         targethosts_repr, srchosts_repr);
+                         targethosts_repr, srchosts_repr,
+                         timerules_repr);
     if (args == NULL) {
         Py_DECREF(users_repr);
         Py_DECREF(services_repr);
         Py_DECREF(targethosts_repr);
         Py_DECREF(srchosts_repr);
+        Py_XDECREF(timerules_repr);
         Py_DECREF(format);
         return NULL;
     }
@@ -912,6 +1136,7 @@ HbacRule_repr(HbacRuleObject *self)
     Py_DECREF(services_repr);
     Py_DECREF(targethosts_repr);
     Py_DECREF(srchosts_repr);
+    Py_XDECREF(timerules_repr);
     Py_DECREF(format);
     Py_DECREF(args);
     return o;
@@ -956,7 +1181,7 @@ py_hbac_rule_validate(HbacRuleObject *self, PyObject *args)
     }
 
     for (attr = HBAC_RULE_ELEMENT_USERS;
-         attr <= HBAC_RULE_ELEMENT_SOURCEHOSTS;
+         attr <= HBAC_RULE_TIMERULES;
          attr <<= 1) {
         if (!(missing & attr)) continue;
 
@@ -1007,6 +1232,8 @@ PyDoc_STRVAR(HbacRuleObject_targethosts__doc__,
 "(HbacRuleElement) Target hosts for which this rule applies");
 PyDoc_STRVAR(HbacRuleObject_srchosts__doc__,
 "(HbacRuleElement) Source hosts for which this rule applies");
+PyDoc_STRVAR(HbacRuleObject_timerules__doc__,
+"(HbacTimeRules) Time policies for the rule");
 
 static PyMemberDef py_hbac_rule_members[] = {
     { discard_const_p(char, "users"), T_OBJECT_EX,
@@ -1024,6 +1251,10 @@ static PyMemberDef py_hbac_rule_members[] = {
     { discard_const_p(char, "srchosts"), T_OBJECT_EX,
       offsetof(HbacRuleObject, srchosts), 0,
       HbacRuleObject_srchosts__doc__},
+
+    { discard_const_p(char, "timerules"), T_OBJECT_EX,
+      offsetof(HbacRuleObject, timerules), 0,
+      HbacRuleObject_timerules__doc__},
 
     { NULL, 0, 0, 0, NULL } /* Sentinel */
 };
@@ -1082,6 +1313,7 @@ free_hbac_rule(struct hbac_rule *rule)
     free_hbac_rule_element(rule->users);
     free_hbac_rule_element(rule->targethosts);
     free_hbac_rule_element(rule->srchosts);
+    free_hbac_time_rules(rule->timerules);
 
     PyMem_Free(discard_const_p(char, rule->name));
     PyMem_Free(rule);
@@ -1121,8 +1353,10 @@ HbacRule_to_native(HbacRuleObject *pyrule)
     rule->users = HbacRuleElement_to_native(pyrule->users);
     rule->targethosts = HbacRuleElement_to_native(pyrule->targethosts);
     rule->srchosts =  HbacRuleElement_to_native(pyrule->srchosts);
+    rule->timerules = HbacTimeRules_to_native(pyrule->timerules);
     if (!rule->services || !rule->users ||
-        !rule->targethosts || !rule->srchosts) {
+        !rule->targethosts || !rule->srchosts ||
+        !rule->timerules) {
         goto fail;
     }
 
@@ -1422,6 +1656,7 @@ typedef struct {
     HbacRequestElement *user;
     HbacRequestElement *targethost;
     HbacRequestElement *srchost;
+    time_t req_time;
 
     PyObject *rule_name;
 } HbacRequest;
@@ -1449,6 +1684,7 @@ HbacRequest_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self->srchost = (HbacRequestElement *) HbacRequestElement_new(
                                             &pyhbac_hbacrequest_element_type,
                                             NULL, NULL);
+    self->req_time = 0;
     if (self->service == NULL || self->user == NULL ||
         self->targethost == NULL || self->srchost == NULL) {
         Py_XDECREF(self->service);
@@ -1667,7 +1903,8 @@ HbacRequest_repr(HbacRequest *self)
     PyObject *o, *format, *args;
 
     format = PyUnicode_FromString("<user %s service %s "
-                                            "targethost %s srchost %s>");
+                                            "targethost %s srchost %s "
+                                            "req_time %s>");
     if (format == NULL) {
         return NULL;
     }
@@ -1686,9 +1923,10 @@ HbacRequest_repr(HbacRequest *self)
         return NULL;
     }
 
-    args = Py_BuildValue(sss_py_const_p(char, "OOOO"),
+    args = Py_BuildValue(sss_py_const_p(char, "OOOOl"),
                          user_repr, service_repr,
-                         targethost_repr, srchost_repr);
+                         targethost_repr, srchost_repr,
+                         self->req_time);
     if (args == NULL) {
         Py_DECREF(user_repr);
         Py_DECREF(service_repr);
@@ -1732,6 +1970,8 @@ PyDoc_STRVAR(HbacRequest_srchost__doc__,
 "(HbacRequestElement) This is a list of source hosts to check, it must\n"
 "consist of the actual source host requested, as well as all parent groups\n"
 "containing that source host.");
+PyDoc_STRVAR(HbacRequest_req_time__doc__,
+"(time_t) This is the time the request was issued.");
 
 static PyMemberDef py_hbac_request_members[] = {
     { discard_const_p(char, "service"), T_OBJECT_EX,
@@ -1749,6 +1989,10 @@ static PyMemberDef py_hbac_request_members[] = {
     { discard_const_p(char, "srchost"), T_OBJECT_EX,
       offsetof(HbacRequest, srchost), 0,
       HbacRequest_srchost__doc__ },
+
+    { discard_const_p(char, "req_time"), T_LONG,
+      offsetof(HbacRequest, req_time), 0,
+      HbacRequest_req_time__doc__ },
 
     { NULL, 0, 0, 0, NULL } /* Sentinel */
 };
@@ -1824,6 +2068,7 @@ HbacRequest_to_native(HbacRequest *pyreq)
     req->user = HbacRequestElement_to_native(pyreq->user);
     req->targethost = HbacRequestElement_to_native(pyreq->targethost);
     req->srchost =  HbacRequestElement_to_native(pyreq->srchost);
+    req->request_time = pyreq->req_time;
     if (!req->service || !req->user ||
         !req->targethost || !req->srchost) {
         goto fail;
@@ -1986,6 +2231,7 @@ initpyhbac(void)
 
     TYPE_READY(m, pyhbac_hbacrule_type, "HbacRule");
     TYPE_READY(m, pyhbac_hbacrule_element_type, "HbacRuleElement");
+    TYPE_READY(m, pyhbac_hbactime_rules_type, "HbacTimeRules");
     TYPE_READY(m, pyhbac_hbacrequest_element_type, "HbacRequestElement");
     TYPE_READY(m, pyhbac_hbacrequest_type, "HbacRequest");
 

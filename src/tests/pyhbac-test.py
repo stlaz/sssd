@@ -145,6 +145,65 @@ class PyHbacRuleElementTest(unittest.TestCase):
         el.groups = ['bar, baz']
         self.assertEquals(el.__repr__(), u'<category 1 names [foo] groups [bar, baz]>')
 
+
+class PyHbacTimeRulesTest(unittest.TestCase):
+    def testInstantiateEmpty(self):
+        el = pyhbac.HbacTimeRules()
+        self.assertCountEqual(el.accesstimes, [])
+
+    def testInit(self):
+        accesstimes = [("BEGIN:VCALENDAR\r\n"
+                        "PRODID:-//The Company//iCal4j 1.0//EN\r\n"
+                        "VERSION:2.0\r\n"
+                        "METHOD:REQUEST\r\n"
+                        "END:VCALENDAR\r\n")]
+
+        rules = pyhbac.HbacTimeRules(accesstimes=accesstimes)
+        self.assertCountEqual(rules.accesstimes, accesstimes)
+
+    def testGetSet(self):
+        accesstimes = [("BEGIN:VCALENDAR\r\n"
+                        "PRODID:-//The Company//iCal4j 1.0//EN\r\n"
+                        "VERSION:2.0\r\n"
+                        "METHOD:REQUEST\r\n"
+                        "END:VCALENDAR\r\n")]
+
+        rules = pyhbac.HbacTimeRules()
+        self.assertCountEqual(rules.accesstimes, [])
+        rules.accesstimes = accesstimes
+        self.assertCountEqual(rules.accesstimes, accesstimes)
+
+        accesstimes = tuple(accesstimes)
+        rules = pyhbac.HbacTimeRules()
+        self.assertCountEqual(rules.accesstimes, [])
+        rules.accesstimes = accesstimes
+        self.assertCountEqual(rules.accesstimes, accesstimes)
+
+    def testNotIterable(self):
+        self.assertRaises(TypeError, pyhbac.HbacRuleElement, accesstimes=123)
+        self.assertRaises(TypeError, pyhbac.HbacRuleElement, accesstimes=None)
+
+    def testRepr(self):
+        accesstimes = [("BEGIN:VCALENDAR\r\n"
+                        "PRODID:-//The Company//iCal4j 1.0//EN\r\n"
+                        "VERSION:2.0\r\n"
+                        "METHOD:REQUEST\r\n"
+                        "END:VCALENDAR\r\n")]
+
+        rules = pyhbac.HbacTimeRules()
+        self.assertEquals(rules.__repr__(), u'<accesstimes []>')
+
+        rules.accesstimes = accesstimes
+        self.assertEquals(rules.__repr__(),
+                          u'<accesstimes ['
+                          'BEGIN:VCALENDAR\r\n'
+                          'PRODID:-//The Company//iCal4j 1.0//EN\r\n'
+                          'VERSION:2.0\r\n'
+                          'METHOD:REQUEST\r\n'
+                          'END:VCALENDAR\r\n'
+                          ']>')
+
+
 class PyHbacRuleTest(unittest.TestCase):
     def testRuleGetSetName(self):
         name = "testGetRule"
@@ -240,7 +299,8 @@ class PyHbacRuleTest(unittest.TestCase):
                                         "users <category 0 names [] groups []> "
                                         "services <category 0 names [] groups []> "
                                         "targethosts <category 0 names [] groups []> "
-                                        "srchosts <category 0 names [] groups []>>")
+                                        "srchosts <category 0 names [] groups []> "
+                                        "timerules <accesstimes []>>")
 
         name = "someuser"
         service = "ssh"
@@ -256,7 +316,8 @@ class PyHbacRuleTest(unittest.TestCase):
                                         "users <category 0 names [%s] groups []> "
                                         "services <category 0 names [%s] groups []> "
                                         "targethosts <category 0 names [%s] groups []> "
-                                        "srchosts <category 0 names [%s] groups []>>" %
+                                        "srchosts <category 0 names [%s] groups []> "
+                                        "timerules <accesstimes []>>" %
                                         (name, service, targethost, srchost))
 
     def testValidate(self):
@@ -407,24 +468,29 @@ class PyHbacRequestTest(unittest.TestCase):
         service = "ssh"
         srchost = "host1"
         targethost = "host2"
+        req_time = 1462793310  # the time I was writing this line
 
         req = pyhbac.HbacRequest()
 
         self.assertEqual(req.__repr__(), "<user <name  groups []> "
                                          "service <name  groups []> "
                                          "targethost <name  groups []> "
-                                         "srchost <name  groups []>>")
+                                         "srchost <name  groups []> "
+                                         "req_time 0>")
 
         req.user.name = name
         req.service.name = service
         req.srchost.name = srchost
         req.targethost.name = targethost
+        req.req_time = req_time
 
         self.assertEqual(req.__repr__(), "<user <name %s groups []> "
                                          "service <name %s groups []> "
                                          "targethost <name %s groups []> "
-                                         "srchost <name %s groups []>>" %
-                                         (name, service, targethost, srchost))
+                                         "srchost <name %s groups []> "
+                                         "req_time %d>" %
+                                         (name, service, targethost,
+                                          srchost, req_time))
 
     def testEvaluateNegative(self):
         name = "someuser"
@@ -531,25 +597,30 @@ if __name__ == "__main__":
     if not res.wasSuccessful():
         error |= 0x2
 
-    suite = unittest.TestLoader().loadTestsFromTestCase(PyHbacRuleTest)
+    suite = unittest.TestLoader().loadTestsFromTestCase(PyHbacTimeRulesTest)
     res = unittest.TextTestRunner().run(suite)
     if not res.wasSuccessful():
         error |= 0x3
 
-    suite = unittest.TestLoader().loadTestsFromTestCase(PyHbacRequestElementTest)
+    suite = unittest.TestLoader().loadTestsFromTestCase(PyHbacRuleTest)
     res = unittest.TextTestRunner().run(suite)
     if not res.wasSuccessful():
         error |= 0x4
 
-    suite = unittest.TestLoader().loadTestsFromTestCase(PyHbacRequestTest)
+    suite = unittest.TestLoader().loadTestsFromTestCase(PyHbacRequestElementTest)
     res = unittest.TextTestRunner().run(suite)
     if not res.wasSuccessful():
         error |= 0x5
 
-    suite = unittest.TestLoader().loadTestsFromTestCase(PyHbacModuleTest)
+    suite = unittest.TestLoader().loadTestsFromTestCase(PyHbacRequestTest)
     res = unittest.TextTestRunner().run(suite)
     if not res.wasSuccessful():
         error |= 0x6
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(PyHbacModuleTest)
+    res = unittest.TextTestRunner().run(suite)
+    if not res.wasSuccessful():
+        error |= 0x7
 
     sys.exit(error)
 
