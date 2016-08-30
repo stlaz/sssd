@@ -42,6 +42,7 @@ struct ipa_access_ctx {
     struct sdap_attr_map *host_map;
     struct sdap_attr_map *hostgroup_map;
     struct sdap_search_base **host_search_bases;
+    struct sdap_search_base **timerule_search_bases;
     struct sdap_search_base **hbac_search_bases;
 };
 

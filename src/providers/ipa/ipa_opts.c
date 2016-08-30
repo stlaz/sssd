@@ -35,6 +35,7 @@ struct dp_option ipa_basic_opts[] = {
     { "ipa_hostname", DP_OPT_STRING, NULL_STRING, NULL_STRING },
     { "ipa_hbac_search_base", DP_OPT_STRING, NULL_STRING, NULL_STRING},
     { "ipa_host_search_base", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+    { "ipa_timerules_search_base", DP_OPT_STRING, NULL_STRING, NULL_STRING},
     { "ipa_selinux_search_base", DP_OPT_STRING, NULL_STRING, NULL_STRING },
     { "ipa_subdomains_search_base", DP_OPT_STRING, NULL_STRING, NULL_STRING },
     { "ipa_master_domain_search_base", DP_OPT_STRING, NULL_STRING, NULL_STRING },

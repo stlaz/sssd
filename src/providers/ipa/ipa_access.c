@@ -111,6 +111,10 @@ struct ipa_fetch_hbac_state {
     struct sysdb_attrs **services;
     size_t servicegroup_count;
     struct sysdb_attrs **servicegroups;
+
+    /* Timerules */
+    size_t timerule_count;
+    struct sysdb_attrs **timerules;
 };
 
 static errno_t ipa_fetch_hbac_retry(struct tevent_req *req);
@@ -118,6 +122,7 @@ static void ipa_fetch_hbac_connect_done(struct tevent_req *subreq);
 static errno_t ipa_fetch_hbac_hostinfo(struct tevent_req *req);
 static void ipa_fetch_hbac_hostinfo_done(struct tevent_req *subreq);
 static void ipa_fetch_hbac_services_done(struct tevent_req *subreq);
+static void ipa_fetch_hbac_timerules_done(struct tevent_req *subreq);
 static void ipa_fetch_hbac_rules_done(struct tevent_req *subreq);
 static errno_t ipa_purge_hbac(struct sss_domain_info *domain);
 static errno_t ipa_save_hbac(struct sss_domain_info *domain,
@@ -300,6 +305,45 @@ static void ipa_fetch_hbac_hostinfo_done(struct tevent_req *subreq)
     ret = ipa_host_info_recv(subreq, state,
                              &state->host_count, &state->hosts,
                              &state->hostgroup_count, &state->hostgroups);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        goto done;
+    }
+
+    subreq = ipa_timerule_info_send(state, state->ev,
+                                    sdap_id_op_handle(state->sdap_op),
+                                    state->sdap_ctx->opts,
+                                    state->access_ctx->timerule_search_bases);
+    if (subreq == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    tevent_req_set_callback(subreq, ipa_fetch_hbac_timerules_done, req);
+
+    return;
+
+done:
+    if (ret != EOK) {
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    tevent_req_done(req);
+}
+
+static void ipa_fetch_hbac_timerules_done(struct tevent_req *subreq)
+{
+    struct ipa_fetch_hbac_state *state = NULL;
+    struct tevent_req *req = NULL;
+    errno_t ret;
+
+    req = tevent_req_callback_data(subreq, struct tevent_req);
+    state = tevent_req_data(req, struct ipa_fetch_hbac_state);
+
+    ret = ipa_timerule_info_recv(subreq, state,
+                                 &state->timerule_count,
+                                 &state->timerules);
     talloc_zfree(subreq);
     if (ret != EOK) {
         goto done;
@@ -539,6 +583,17 @@ static errno_t ipa_save_hbac(struct sss_domain_info *domain,
               ret, sss_strerror(ret));
         goto done;
     }
+    /* Save the timerules if we have any */
+    if (state->timerule_count > 0) {
+        ret = ipa_hbac_sysdb_save(domain, HBAC_TIMERULES_SUBDIR, IPA_CN,
+                                  state->timerule_count, state->timerules,
+                                  NULL, NULL, 0, NULL);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_CRIT_FAILURE, "Error saving time rules [%d]: %s\n",
+                  ret, sss_strerror(ret));
+            goto done;
+        }
+    }
     /* Save the rules */
     ret = ipa_hbac_sysdb_save(domain, HBAC_RULES_SUBDIR, IPA_UNIQUE_ID,
                               state->rule_count, state->rules,
@@ -665,12 +720,14 @@ errno_t hbac_get_cached_rules(TALLOC_CTX *mem_ctx,
                             IPA_EXTERNAL_HOST,
                             IPA_MEMBER_HOST,
                             IPA_HOST_CATEGORY,
+                            IPA_MEMBER_TIMERULE,
                             NULL };
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) return ENOMEM;
 
-    filter = talloc_asprintf(tmp_ctx, "(objectClass=%s)", IPA_HBAC_RULE);
+    filter = talloc_asprintf(tmp_ctx, "(|(objectClass=%s)(objectClass=%s))",
+                             IPA_HBAC_RULE, IPA_HBAC_RULEV2);
     if (filter == NULL) {
         ret = ENOMEM;
         goto done;

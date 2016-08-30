@@ -786,6 +786,8 @@ errno_t sssm_ipa_access_init(TALLOC_CTX *mem_ctx,
     access_ctx->host_map = id_ctx->ipa_options->host_map;
     access_ctx->hostgroup_map = id_ctx->ipa_options->hostgroup_map;
     access_ctx->host_search_bases = id_ctx->ipa_options->host_search_bases;
+    access_ctx->timerule_search_bases =
+        id_ctx->ipa_options->timerule_search_bases;
     access_ctx->hbac_search_bases = id_ctx->ipa_options->hbac_search_bases;
 
     ret = dp_copy_options(access_ctx, id_ctx->ipa_options->basic,

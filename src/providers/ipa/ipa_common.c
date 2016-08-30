@@ -137,6 +137,9 @@ static errno_t ipa_parse_search_base(TALLOC_CTX *mem_ctx,
     case IPA_HOST_SEARCH_BASE:
         class_name = "IPA_HOST";
         break;
+    case IPA_TIMERULE_SEARCH_BASE:
+        class_name = "IPA_TIMERULE";
+        break;
     case IPA_SELINUX_SEARCH_BASE:
         class_name = "IPA_SELINUX";
         break;
@@ -350,6 +353,30 @@ int ipa_get_id_options(struct ipa_options *ipa_opts,
     ret = ipa_parse_search_base(ipa_opts->basic, ipa_opts->basic,
                                 IPA_HOST_SEARCH_BASE,
                                 &ipa_opts->host_search_bases);
+    if (ret != EOK) goto done;
+
+    if (NULL == dp_opt_get_string(ipa_opts->basic,
+                                  IPA_TIMERULE_SEARCH_BASE)) {
+
+        value = talloc_asprintf(tmpctx, "cn=timerules,%s", basedn);
+        if (value == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+        ret = dp_opt_set_string(ipa_opts->basic, IPA_TIMERULE_SEARCH_BASE,
+                                value);
+        if (ret != EOK) {
+            goto done;
+        }
+
+        DEBUG(SSSDBG_CONF_SETTINGS, "Option %s set to %s\n",
+                  ipa_opts->basic[IPA_TIMERULE_SEARCH_BASE].opt_name,
+                  dp_opt_get_string(ipa_opts->basic,
+                                    IPA_TIMERULE_SEARCH_BASE));
+    }
+    ret = ipa_parse_search_base(ipa_opts->basic, ipa_opts->basic,
+                                IPA_TIMERULE_SEARCH_BASE,
+                                &ipa_opts->timerule_search_bases);
     if (ret != EOK) goto done;
 
     if (NULL == dp_opt_get_string(ipa_opts->basic,

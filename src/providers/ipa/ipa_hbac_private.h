@@ -27,6 +27,9 @@
 #include "lib/ipa_hbac/ipa_hbac.h"
 
 #define IPA_HBAC_RULE "ipaHBACRule"
+#define IPA_HBAC_RULEV2 "ipaHBACRulev2"
+
+#define IPA_TIMERULE "ipaTimeRule"
 
 #define IPA_HBAC_SERVICE "ipaHBACService"
 #define IPA_HBAC_SERVICE_GROUP "ipaHBACServiceGroup"
@@ -53,6 +56,8 @@
 #define IPA_CN "cn"
 #define IPA_MEMBER_SERVICE "memberService"
 #define IPA_SERVICE_CATEGORY "serviceCategory"
+#define IPA_ACCESSTIME "accessTime"
+#define IPA_MEMBER_TIMERULE "ipaMemberTimeRule"
 #define IPA_TRUE_VALUE "TRUE"
 
 #define IPA_HBAC_BASE_TMPL "cn=hbac,%s"
@@ -63,6 +68,7 @@
 #define HBAC_RULES_SUBDIR "hbac_rules"
 #define HBAC_SERVICES_SUBDIR "hbac_services"
 #define HBAC_SERVICEGROUPS_SUBDIR "hbac_servicegroups"
+#define HBAC_TIMERULES_SUBDIR "hbac_timerules"
 
 /* From ipa_hbac_common.c */
 errno_t
@@ -129,6 +135,13 @@ hbac_service_attrs_to_rule(TALLOC_CTX *mem_ctx,
                            const char *rule_name,
                            struct sysdb_attrs *rule_attrs,
                            struct hbac_rule_element **services);
+
+errno_t
+hbac_time_attrs_to_rule(TALLOC_CTX *mem_ctx,
+                       const char *rule_name,
+                       struct sysdb_attrs *rule_attrs,
+                       struct hbac_time_rules **_times);
+
 errno_t
 get_ipa_servicegroupname(TALLOC_CTX *mem_ctx,
                          struct sysdb_ctx *sysdb,
@@ -148,5 +161,26 @@ get_ipa_groupname(TALLOC_CTX *mem_ctx,
                   struct sysdb_ctx *sysdb,
                   const char *group_dn,
                   const char **groupname);
+
+/* From ipa_hbac_timerules.c */
+struct tevent_req *
+ipa_timerule_info_send(TALLOC_CTX *mem_ctx,
+                       struct tevent_context *ev,
+                       struct sdap_handle *sh,
+                       struct sdap_options *opts,
+                       struct sdap_search_base **search_bases);
+
+errno_t
+ipa_timerule_info_recv(struct tevent_req *req,
+                      TALLOC_CTX *mem_ctx,
+                      size_t *timerule_count,
+                      struct sysdb_attrs ***timerules);
+
+errno_t
+timerule_attrs_to_rule(TALLOC_CTX *mem_ctx,
+                     struct sss_domain_info *domain,
+                     const char *rule_name,
+                     struct sysdb_attrs *rule_attrs,
+                     struct hbac_time_rules ***_timerules);
 
 #endif /* IPA_HBAC_PRIVATE_H_ */
