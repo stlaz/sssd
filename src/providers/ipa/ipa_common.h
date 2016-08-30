@@ -43,6 +43,7 @@ enum ipa_basic_opt {
     IPA_HOSTNAME,
     IPA_HBAC_SEARCH_BASE,
     IPA_HOST_SEARCH_BASE,
+    IPA_TIMERULE_SEARCH_BASE,
     IPA_SELINUX_SEARCH_BASE,
     IPA_SUBDOMAINS_SEARCH_BASE,
     IPA_MASTER_DOMAIN_SEARCH_BASE,
@@ -212,6 +213,7 @@ struct ipa_options {
     struct sdap_attr_map *override_map;
 
     struct sdap_search_base **host_search_bases;
+    struct sdap_search_base **timerule_search_bases;
     struct sdap_search_base **hbac_search_bases;
     struct sdap_search_base **selinux_search_bases;
     struct sdap_search_base **subdomains_search_bases;

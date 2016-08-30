@@ -103,6 +103,10 @@ static void get_allow_all_rule(TALLOC_CTX *mem_ctx,
     rule->srchosts->names = NULL;
     rule->srchosts->groups = NULL;
 
+    rule->timerules = talloc_array(rule, struct hbac_time_rules *, 1);
+    fail_if(rule->timerules == NULL);
+    rule->timerules[0] = NULL;
+
     *allow_rule = rule;
 }
 

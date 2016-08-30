@@ -352,6 +352,17 @@ hbac_attrs_to_rule(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
+    ret = timerule_attrs_to_rule(new_rule, hbac_ctx->be_ctx->domain,
+                                 new_rule->name,
+                                 hbac_ctx->rules[idx],
+                                 &new_rule->timerules);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Could not parse time rules for rule [%s]\n",
+                new_rule->name);
+        goto done;
+    }
+
     *rule = new_rule;
     ret = EOK;
 
