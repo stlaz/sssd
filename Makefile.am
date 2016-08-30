@@ -304,13 +304,13 @@ PYTHON_TESTS =
 
 if BUILD_PYTHON2_BINDINGS
 PYTHON_TESTS += src/config/SSSDConfigTest.py2.sh \
-                src/tests/pyhbac-test.py2.sh \
+                #src/tests/pyhbac-test.py2.sh \
                 src/tests/pysss_murmur-test.py2.sh \
                 $(NULL)
 endif
 if BUILD_PYTHON3_BINDINGS
 PYTHON_TESTS += src/config/SSSDConfigTest.py3.sh \
-                src/tests/pyhbac-test.py3.sh \
+                #src/tests/pyhbac-test.py3.sh \
                 src/tests/pysss_murmur-test.py3.sh \
                 $(NULL)
 endif
