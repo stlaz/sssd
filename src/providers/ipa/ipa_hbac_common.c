@@ -265,7 +265,6 @@ hbac_attrs_to_rule(TALLOC_CTX *mem_ctx,
     struct hbac_rule *new_rule;
     struct ldb_message_element *el;
     const char *rule_type;
-    int rule_version = 1;
 
     new_rule = talloc_zero(mem_ctx, struct hbac_rule);
     if (new_rule == NULL) return ENOMEM;
@@ -295,13 +294,9 @@ hbac_attrs_to_rule(TALLOC_CTX *mem_ctx,
     ret = sysdb_attrs_get_string(hbac_ctx->rules[idx],
                                  IPA_ACCESS_RULE_TYPE,
                                  &rule_type);
-    /* ENOENT is returned if this is ipaHBACRuleV2 object */
-    if (ret != EOK) {
-        if (ret == ENOENT) rule_version = 2;
-        else goto done;
-    }
+    if (ret != EOK) goto done;
 
-    if (rule_version == 1 && strcasecmp(rule_type, IPA_HBAC_ALLOW) != 0) {
+    if (strcasecmp(rule_type, IPA_HBAC_ALLOW) != 0) {
         DEBUG(SSSDBG_TRACE_LIBS,
               "Rule [%s] is not an ALLOW rule\n", new_rule->name);
         ret = EPERM;
@@ -357,18 +352,17 @@ hbac_attrs_to_rule(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    if (rule_version == 2) {
-        ret = timerule_attrs_to_rule(new_rule, hbac_ctx->be_ctx->domain,
-                                     new_rule->name,
-                                     hbac_ctx->rules[idx],
-                                     &new_rule->timerules);
-        if (ret != EOK) {
-            DEBUG(SSSDBG_CRIT_FAILURE,
-                  "Could not parse time rules for rule [%s]\n",
-                    new_rule->name);
-            goto done;
-        }
+    ret = timerule_attrs_to_rule(new_rule, hbac_ctx->be_ctx->domain,
+                                 new_rule->name,
+                                 hbac_ctx->rules[idx],
+                                 &new_rule->timerules);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Could not parse time rules for rule [%s]\n",
+                new_rule->name);
+        goto done;
     }
+
     *rule = new_rule;
     ret = EOK;
 
