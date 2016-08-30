@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <talloc.h>
+#include <libical/ical.h>
 
 #include "tests/common_check.h"
 #include "lib/ipa_hbac/ipa_hbac.h"
@@ -185,6 +186,33 @@ static void get_test_srchost(TALLOC_CTX *mem_ctx,
     new_srchost->groups[2] = NULL;
 
     *srchost = new_srchost;
+}
+
+static char *hbac_time_rules_err_string(TALLOC_CTX *ctx, errno_t expected,
+                                        errno_t result, struct hbac_info *info,
+                                        const char *time_str, const char *rule)
+{
+    return talloc_asprintf(ctx,
+                          "Expected [%s], got [%s]; "
+                          "Error: [%s]\n"
+                          "Current time: [%s]\n"
+                          "Time rule:\n%s",
+                          hbac_result_string(expected),
+                          hbac_result_string(result),
+                          info ? hbac_error_string(info->code) : "Unknown",
+                          time_str,
+                          rule);
+}
+
+static char *
+strftime_with_ctx(TALLOC_CTX *ctx, const char *fmt, struct tm *t)
+{
+    char tmp[100];
+
+    if (strftime(tmp, 100*sizeof(char), fmt, t) == 0)
+        return NULL;
+
+    return (char *)talloc_strdup(ctx, tmp);
 }
 
 START_TEST(ipa_hbac_test_allow_all)
@@ -824,6 +852,294 @@ START_TEST(ipa_hbac_test_allow_srchostgroup)
 }
 END_TEST
 
+START_TEST(ipa_hbac_test_accesstime)
+{
+
+    enum hbac_eval_result result;
+    TALLOC_CTX *test_ctx;
+    struct hbac_rule **rules;
+    struct hbac_eval_req *eval_req;
+    struct hbac_info *info = NULL;
+    struct tm *tm_now;
+    char *now_str;
+    bool is_valid;
+    uint32_t missing_attrs;
+
+    /* Mon, 18 Apr 2016 07:39:57 UTC */
+    time_t tstamp = 1460965197;
+    char ical_head[] = "BEGIN:VCALENDAR\r\n"
+                       "PRODID:-//The Company//iCal4j 1.0//EN\r\n"
+                       "VERSION:2.0\r\n"
+                       "METHOD:REQUEST\r\n"
+                       "BEGIN:VEVENT\r\n"
+                       "UID:1@company.org\r\n"
+                       "DTSTAMP:20160406T112129Z\r\n";
+
+    char ical_tail[] = "END:VEVENT\r\n"
+                       "END:VCALENDAR\r\n";
+
+
+    const int NUM_ALLOW_RULES = 14;
+    const int NUM_DENY_RULES = 16;
+
+    const char *allow_rules[] = {
+        /* 1 DTSTART with DATE-TIME value */
+        "DTSTART:20160418T073957Z\r\n",
+        /* 2 DTSTART with DATE value */
+        "DTSTART;VALUE=DATE:20160418\r\n",
+        /* 3 DTSTART and DTEND, DATE-TIME values, in time-zones */
+        "DTSTART:20160310T101500Z\r\nDTEND;TZID=CET:20160418T093958\r\n",
+        /* 4 DTSTART and DTEND, DATE values */
+        "DTSTART;VALUE=DATE:20160310\r\nDTEND;VALUE=DATE:20160419\r\n",
+        /* 5 DTSTART as DATE-TIME and DURATION */
+        "DTSTART:20160410T063600Z\r\nDURATION:P8DT1H3M58S\r\n",
+        /* 6 DTSTART as DATE and DURATION */
+        "DTSTART:20160401\r\nDURATION:P3W\r\n",
+        /* 7 RDATE with PERIOD values */
+        "DTSTART:20100101T000000Z\r\nRDATE;VALUE=PERIOD:20100101T000000Z/PT1S,"
+        " 20150418T073957Z/P366DT1S\r\n",
+        /* 8 RDATE with DATE-TIME values, time-zoned */
+        "DTSTART;TZID=CET:19900522T000000\r\n"
+        "RDATE;TZID=CET:19900522T000000,20000202T200202,"
+        " 20160418T093957\r\n",
+        /* 9 RDATE with DATE values */
+        "DTSTART;VALUE=DATE:19891117\r\nRDATE;VALUE=DATE:19891117,20200202,"
+        " 20160418\r\n",
+        /* 10 RDATE and EXDATE */
+        "DTSTART:19951010T195110Z\r\n"
+        "RDATE: 19951010T195110Z, 20051010T195110Z, 20160418T073957Z\r\n"
+        "EXDATE:20051010T195110Z, 20160418T093957Z\r\n",
+        /* 11 RRULE */
+        "DTSTART:20101115T083957Z\r\n"
+        "RRULE:FREQ=YEARLY;INTERVAL=1;BYMONTH=4,11;BYDAY=MO;BYHOUR=7,8\r\n",
+        /* 12 RRULE: EXDATE cancels intermediate event */
+        "DTSTART:20101115T083957Z\r\n"
+        "RRULE:FREQ=YEARLY;INTERVAL=1;BYMONTH=4,11;BYDAY=MO;BYHOUR=7,8\r\n"
+        "EXDATE:20141117T083957Z\r\n",
+        /* 13 RRULE with DTSTART+DTEND */
+        "DTSTART:20101115T050000Z\r\n"
+        "DTEND:20101115T070000Z\r\n"
+        "RRULE:FREQ=MONTHLY;INTERVAL=5;BYDAY=MO;BYHOUR=5,6\r\n",
+        /* 14 RRULE with DTSTART+DTEND, EXDATE cancels first matching event */
+        "DTSTART:20101115T050000Z\r\n"
+        "DTEND:20101115T070000Z\r\n"
+        "RRULE:FREQ=MONTHLY;INTERVAL=5;BYDAY=MO,TU,WE;BYHOUR=5,6,7\r\n"
+        "EXDATE: 20160418T060000Z\r\n",
+    };
+
+    const char *noallow_rules[] = {
+        /* 1 DTSTART with DATE-TIME value */
+        "DTSTART:20160418T093957Z\r\n",
+        /* 2 DTSTART with DATE value */
+        "DTSTART;VALUE=DATE:20160419\r\n",
+        /* 3 DTSTART and DTEND, DATE-TIME values, in time-zones */
+        "DTSTART:20160310T101500Z\r\nDTEND;TZID=CET:20160418T093957\r\n",
+        /* 4 DTSTART and DTEND, DATE values */
+        "DTSTART;VALUE=DATE:20160310\r\nDTEND;VALUE=DATE:20160418\r\n",
+        /* 5 DTSTART and DURATION */
+        "DTSTART:20160410T063600Z\r\nDURATION:P8DT1H\r\n",
+        /* 6 DTSTART as DATE and DURATION */
+        "DTSTART:20160401\r\nDURATION:P2W\r\n",
+        /* 7 RDATE with PERIOD values */
+        "DTSTART:20100101T000000Z\r\nRDATE;VALUE=PERIOD:20100101T000000Z/PT1S,"
+        " 20150418T073957Z/P366D\r\n",
+        /* 8 RDATE with DATE-TIME values */
+        "DTSTART;TZID=CET:19900522T000000\r\n"
+        "RDATE:19900522T000000Z,20000202T200202Z, 20160418T093957Z\r\n",
+        /* 9 RDATE with DATE values */
+        "DTSTART;VALUE=DATE:19891117\r\nRDATE;VALUE=DATE:19891117,20200202,"
+        " 20160419\r\n",
+        /* 10 RDATE with EXDATE */
+        "DTSTART;VALUE=DATE:19891117\r\n"
+        "RDATE;VALUE=DATE:19891117, 20200202, 20160418\r\n"
+        "EXDATE;VALUE=DATE:20160418\r\n",
+        /* 11 RDATE with EXDATE - DATE-TIME values */
+        "DTSTART;TZID=America/New_York:19951010T195110\r\n"
+        "RDATE: 19951010T195110Z, 20051010T195110Z, 20160418T073957Z\r\n"
+        "EXDATE:20051010T195110Z, 20160418T073957Z\r\n",
+        /* 12 RDATE: EXDATE to exclude DTSTART date */
+        "DTSTART;VALUE=DATE:20160418\r\n"
+        "RDATE;VALUE=DATE:19891117,20200202, 20160418\r\n"
+        "EXDATE;VALUE=DATE:20160418\r\n",
+        /* 13 RRULE */
+        "DTSTART:20101115T083957Z\r\n"
+        "RRULE:FREQ=YEARLY;BYMONTH=4,11;BYDAY=MO\r\n",
+        /* 14 RRULE: EXDATE cancels the right event */
+        "DTSTART:20101115T083957Z\r\n"
+        "RRULE:FREQ=YEARLY;INTERVAL=1;BYMONTH=4,11;BYDAY=MO;BYHOUR=7,8\r\n"
+        "EXDATE:20160418T073957Z\r\n",
+        /* 15 RRULE with DTSTART+DTEND */
+        "DTSTART:20101115T050000Z\r\n"
+        "DTEND:20101115T070000Z\r\n"
+        "RRULE:FREQ=MONTHLY;INTERVAL=5;BYDAY=MO,TU,WE;BYHOUR=1,5\r\n",
+        /* 16 RRULE with DTSTART+DTEND and cancelling EXDATE */
+        "DTSTART:20101115T050000Z\r\n"
+        "DTEND:20101115T070000Z\r\n"
+        "RRULE:FREQ=MONTHLY;INTERVAL=5;BYDAY=MO,TU,WE;BYHOUR=5,6\r\n"
+        "EXDATE: 20160418T060000Z\r\n",
+    };
+
+    test_ctx = talloc_new(global_talloc_context);
+
+    tm_now = localtime(&tstamp);
+    now_str = strftime_with_ctx(test_ctx, "%Y%m%dT%H%M%S", tm_now);
+
+    /* Create a requset */
+    eval_req = talloc_zero(test_ctx, struct hbac_eval_req);
+    fail_if(eval_req == NULL);
+
+    //tstamp = time(NULL);
+    fail_if(tstamp == -1);
+
+    eval_req->request_time = tstamp;
+
+    get_test_user(eval_req, &eval_req->user);
+    get_test_service(eval_req, &eval_req->service);
+    get_test_srchost(eval_req, &eval_req->srchost);
+
+    /* Rules array for evaluation */
+    rules = talloc_array(test_ctx, struct hbac_rule *, 2);
+    fail_if(rules == NULL);
+
+    /* Will use only one rule at a time */
+    rules[1] = NULL;
+
+    get_allow_all_rule(rules, &rules[0]);
+
+    /* Preparations of the rule for time rules addition */
+    rules[0]->name = talloc_strdup(rules[0], "Timed rule");
+    fail_if(rules[0]->name == NULL);
+
+    rules[0]->timerules = talloc_array(rules[0], struct hbac_time_rules *, 2);
+    fail_if(rules[0]->timerules == NULL);
+    /* we'll also use only one time rule with multiple accesstimes */
+    rules[0]->timerules[0] = talloc_zero(rules[0]->timerules,
+                                         struct hbac_time_rules);
+    fail_if(rules[0]->timerules[0] == NULL);
+    rules[0]->timerules[1] = NULL;
+
+    rules[0]->timerules[0]->accesstimes = talloc_array(rules[0]->timerules[0],
+                                                    const char *, 4);
+    fail_if(rules[0]->timerules[0]->accesstimes == NULL);
+
+    /* Evaluating one time rule at a time */
+    rules[0]->timerules[0]->accesstimes[1] = NULL;
+    for(int i = 0; i < NUM_DENY_RULES; i++) {
+        /* No-allow time rule */
+        rules[0]->timerules[0]->accesstimes[0] = talloc_asprintf(test_ctx,
+                                                              "%s%s%s",
+                                                              ical_head,
+                                                              noallow_rules[i],
+                                                              ical_tail);;
+        /* Validate the rule */
+        is_valid = hbac_rule_is_complete(rules[0], &missing_attrs);
+        fail_unless(is_valid);
+        fail_unless(missing_attrs == 0);
+
+        /* No-allow time rule */
+        result = hbac_evaluate(rules, eval_req, &info);
+        fail_unless(result == HBAC_EVAL_DENY,
+                    hbac_time_rules_err_string(test_ctx, HBAC_EVAL_DENY,
+                                               result, info, now_str,
+                                               rules[0]->timerules[0]->accesstimes[0])
+                    );
+        hbac_free_info(info);
+        info = NULL;
+    }
+
+    for(int i = 0; i < NUM_ALLOW_RULES; i++) {
+        /* Allow time rule */
+        rules[0]->timerules[0]->accesstimes[0] = talloc_asprintf(test_ctx,
+                                                              "%s%s%s",
+                                                              ical_head,
+                                                              allow_rules[i],
+                                                              ical_tail);
+        /* Validate the rule */
+        is_valid = hbac_rule_is_complete(rules[0], &missing_attrs);
+        fail_unless(is_valid);
+        fail_unless(missing_attrs == 0);
+
+        /* Evaluate the rule */
+        result = hbac_evaluate(rules, eval_req, &info);
+        fail_unless(result == HBAC_EVAL_ALLOW,
+                    hbac_time_rules_err_string(test_ctx, HBAC_EVAL_ALLOW,
+                                               result, info, now_str,
+                                               rules[0]->timerules[0]->accesstimes[0])
+                   );
+        hbac_free_info(info);
+        info = NULL;
+    }
+
+    const char two_events_allow[] =
+            /* first, non-allow part */
+            "DTSTART:20101115T050000Z\r\n"
+            "DTEND:20101115T070000Z\r\n"
+            "RRULE:FREQ=MONTHLY;INTERVAL=5;BYDAY=MO,TU,WE;BYHOUR=5,6\r\n"
+            "EXDATE: 20160418T060000Z\r\n"
+            "END:VEVENT\r\n"
+            /* second, allow part */
+            "BEGIN:VEVENT\r\n"
+            "UID:1@darkside.com\r\n"
+            "DTSTAMP:20160406T112129Z\r\n"
+            "DTSTART:20101115T050000Z\r\n"
+            "DTEND:20101115T070000Z\r\n"
+            "RRULE:FREQ=MONTHLY;INTERVAL=5;BYDAY=MO;BYHOUR=5,6\r\n";
+
+    rules[0]->timerules[0]->accesstimes[0] = talloc_asprintf(test_ctx,
+                                                          "%s%s%s",
+                                                          ical_head,
+                                                          two_events_allow,
+                                                          ical_tail);
+    /* Validate the rule */
+    is_valid = hbac_rule_is_complete(rules[0], &missing_attrs);
+    fail_unless(is_valid);
+    fail_unless(missing_attrs == 0);
+
+    /* Evaluate the rule */
+    result = hbac_evaluate(rules, eval_req, &info);
+    fail_unless(result == HBAC_EVAL_ALLOW,
+                hbac_time_rules_err_string(test_ctx, HBAC_EVAL_ALLOW,
+                                           result, info, now_str,
+                                           rules[0]->timerules[0]->accesstimes[0])
+             );
+    hbac_free_info(info);
+    info = NULL;
+
+    const char two_events_noallow[] =
+            /* nonmatching TDATE */
+            "DTSTART;VALUE=DATE:19891117\r\n"
+            "RDATE;VALUE=DATE:19891117,20200202,20160419\r\n"
+            "END:VEVENT\r\n"
+            /* duration too short  */
+            "BEGIN:VEVENT\r\n"
+            "UID:1@darkside.com\r\n"
+            "DTSTAMP:20160406T112129Z\r\n"
+            "DTSTART:20160401\r\nDURATION:P2W\r\n";
+
+    rules[0]->timerules[0]->accesstimes[0] = talloc_asprintf(test_ctx,
+                                                          "%s%s%s",
+                                                          ical_head,
+                                                          two_events_noallow,
+                                                          ical_tail);
+    /* Validate the rule */
+    is_valid = hbac_rule_is_complete(rules[0], &missing_attrs);
+    fail_unless(is_valid);
+    fail_unless(missing_attrs == 0);
+
+    /* Evaluate the rule */
+    result = hbac_evaluate(rules, eval_req, &info);
+    fail_unless(result == HBAC_EVAL_DENY,
+                hbac_time_rules_err_string(test_ctx, HBAC_EVAL_DENY,
+                                           result, info, now_str,
+                                           rules[0]->timerules[0]->accesstimes[0])
+             );
+    hbac_free_info(info);
+    info = NULL;
+
+    talloc_free(test_ctx);
+}
+END_TEST
+
 START_TEST(ipa_hbac_test_incomplete)
 {
     TALLOC_CTX *test_ctx;
@@ -863,6 +1179,7 @@ Suite *hbac_test_suite (void)
     tcase_add_test(tc_hbac, ipa_hbac_test_allow_svcgroup);
     tcase_add_test(tc_hbac, ipa_hbac_test_allow_srchost);
     tcase_add_test(tc_hbac, ipa_hbac_test_allow_srchostgroup);
+    tcase_add_test(tc_hbac, ipa_hbac_test_accesstime);
     tcase_add_test(tc_hbac, ipa_hbac_test_allow_utf8);
     tcase_add_test(tc_hbac, ipa_hbac_test_incomplete);
 
