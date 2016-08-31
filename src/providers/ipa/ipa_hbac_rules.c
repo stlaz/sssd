@@ -118,12 +118,13 @@ ipa_hbac_rule_info_send(TALLOC_CTX *mem_ctx,
     state->attrs[16] = NULL;
 
     rule_filter = talloc_asprintf(tmp_ctx,
-                                  "(&(|(objectclass=%s)(objectclass=%s))"
-                                  "(%s=%s)(%s=%s)"
+                                  "(&(objectclass=%s)"
+                                  "(%s=%s)(|(%s=%s)(%s=%s))"
                                   "(|(%s=%s)(%s=%s)",
-                                  IPA_HBAC_RULE, IPA_HBAC_RULEV2,
+                                  IPA_HBAC_RULE,
                                   IPA_ENABLED_FLAG, IPA_TRUE_VALUE,
                                   IPA_ACCESS_RULE_TYPE, IPA_HBAC_ALLOW,
+                                  IPA_ACCESS_RULE_TYPE, IPA_HBAC_ALLOW_WITH_TIME,
                                   IPA_HOST_CATEGORY, "all",
                                   IPA_MEMBER_HOST, host_dn_clean);
     if (rule_filter == NULL) {

@@ -27,7 +27,6 @@
 #include "lib/ipa_hbac/ipa_hbac.h"
 
 #define IPA_HBAC_RULE "ipaHBACRule"
-#define IPA_HBAC_RULEV2 "ipaHBACRulev2"
 
 #define IPA_TIMERULE "ipaTimeRule"
 
@@ -44,6 +43,7 @@
 #define IPA_MEMBEROF "memberOf"
 #define IPA_ACCESS_RULE_TYPE "accessRuleType"
 #define IPA_HBAC_ALLOW "allow"
+#define IPA_HBAC_ALLOW_WITH_TIME "allow_with_time"
 #define IPA_MEMBER_USER "memberUser"
 #define IPA_USER_CATEGORY "userCategory"
 #define IPA_SERVICE_NAME "serviceName"

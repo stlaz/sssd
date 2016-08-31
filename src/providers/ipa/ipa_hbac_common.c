@@ -296,9 +296,10 @@ hbac_attrs_to_rule(TALLOC_CTX *mem_ctx,
                                  &rule_type);
     if (ret != EOK) goto done;
 
-    if (strcasecmp(rule_type, IPA_HBAC_ALLOW) != 0) {
+    if ((strcasecmp(rule_type, IPA_HBAC_ALLOW) != 0) &&
+            (strcasecmp(rule_type, IPA_HBAC_ALLOW_WITH_TIME) != 0)) {
         DEBUG(SSSDBG_TRACE_LIBS,
-              "Rule [%s] is not an ALLOW rule\n", new_rule->name);
+              "Rule [%s] is not an ALLOW or ALLOW_WITH_TIME rule\n", new_rule->name);
         ret = EPERM;
         goto done;
     }
